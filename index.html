@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload Form</title>
+</head>
+<body>
+
+    <h2>File Upload Form</h2>
+
+    <form id="fileUploadForm" enctype="multipart/form-data">
+        <label for="file">Choose File:</label>
+        <input type="file" id="file" name="file" required>
+        <br>
+        <button type="button" onclick="startUpload()">Start Upload</button>
+        <div id="progressContainer" style="display: block;">
+            <!-- <div id="progressBar" style="width: 0%; background-color: #2813b3; height: 20px;max-width: 400px;"></div> -->
+            <div id="progressBartext"> 0 % </div>
+        </div>
+    </form>
+
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script>
+        async function startUpload() {
+            const fileInput = document.getElementById('file');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Please choose a file.');
+                return;
+            }
+            const fileName = file.name;
+            console.log(fileName);
+
+            // Step 1: Generate upload ID
+            const generateUploadIdResponse = await $.ajax({
+                url: 'http://localhost:3000/generateUploadId',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ fileName: fileName }),
+            });
+
+            const uploadId = generateUploadIdResponse.uploadId;
+            const key = generateUploadIdResponse.key;
+
+            // Step 2: Upload file chunks
+            const fileSizeInBytes = file.size;
+            const chunkSize = 20 * 1024 * 1024; // 1 MB in bytes
+            const totalChunks = Math.ceil(fileSizeInBytes / chunkSize);
+
+            for (let i = 0; i < totalChunks; i++) {
+                const startByte = i * chunkSize;
+                const endByte = Math.min((i + 1) * chunkSize, fileSizeInBytes);
+                console.log("===========",totalChunks,"======",startByte,endByte);
+
+                const chunk = file.slice(startByte, endByte);
+
+                const formData = new FormData();
+                formData.append('fileChunk', chunk);
+                formData.append('fileName', fileName);
+                formData.append('key', key);
+                formData.append('chunkIndex', i + 1);
+                formData.append('uploadId', uploadId);
+
+                // Step 2: Upload the chunk to the server
+                const uploadChunkResponse = await $.ajax({
+                    url: 'http://localhost:3000/uploadChunk',
+                    method: 'POST',
+                    processData: false,
+                    contentType: false,
+                    data: formData,
+                });
+
+                console.log(uploadChunkResponse);
+                let percentComplete = ((i + 1) / totalChunks) * 100;
+               
+                 document.getElementById('progressBartext').innerHTML =percentComplete + '%' ;
+                
+            }
+
+            // Step 3: Complete the multipart upload
+            const completeUploadResponse = await $.ajax({
+                url: 'http://localhost:3000/completeUpload',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    fileName: fileName,
+                    key: key,
+                    uploadId: uploadId,
+                    totalChunks: totalChunks,
+                }),
+            });
+
+            console.log(completeUploadResponse);
+
+            alert('File uploaded successfully!');
+        }
+    </script>
+
+</body>
+</html>
